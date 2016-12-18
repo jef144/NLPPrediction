@@ -4,101 +4,150 @@ library("tm")
 library(ngram) 
 library(parallel)
 library(data.table)
-    
+library(stringr)
+     
 #Get to the file
 setwd("~/NLPCapstone")
 #Access the data.  Note that the subset folder has small files
 folder <-  "~/NLPCapstone/final/en_US/subset" 
 
-#Determine if we need to read the corpus text files, or just re-load the corpus object
-if ( file.exists("NLP.task1.RDS")) { 
-    task1 <- readRDS(file="NLP.task1.RDS")
-}  else  {
- 
-    #Access the data.  Note that the subset folder has small files
-    (task1 <- VCorpus(DirSource(folder, encoding = "UTF-8"),
-                        readerControl= list(language="english")) )
-    task1 <- tm_map(task1, removeNumbers)
-    gc() 
-    task1 <- tm_map(task1, removePunctuation)
-    gc()
-    task1 <- tm_map(task1 , stripWhitespace)
-    gc()
-    #task1 <- tm_map(task1, tolower)
-    task1 <- tm_map(task1, removeWords, stopwords("english")) 
-    gc()
-    #task1 <- tm_map(task1, stemDocument, language = "english") 
-    saveRDS(task1, file="NLP.task1.RDS")
-} 
-#end of reading task1 if no RDS file found
-if (file.exists("NLP.dtm1.RDS")) {
-  dtm1 <- readRDS(file="NLP.dtm1.RDS")
-}  else  {
-    dtm1 <- DocumentTermMatrix(task1)
-    gc()
-    saveRDS(dtm1, file="NLP.dtm1.RDS")
-    dtm1 <-removeSparseTerms(dtm1, 0.75) 
-    gc()
-    saveRDS(dtm1, file="NLP.dtm1.RDS")
-}
 
-#inspect(dtm1[1:3, 1000:1020])
- 
-    
-#Progress to bigrams andn
-
-BigramTokenizer <-
-  function(x)
-    unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
-#TrigramTokenizer <- function(x)  NGramTokenizer(x, Weka_control(min = 3, max = 3))
-TrigramTokenizer <- 
-  function(x)
-  unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE)
-
-gc()
+###Bigrams
 if (file.exists("NLP.dtmBigram.RDS")) {
   dtmBigram <- readRDS(file="NLP.dtmBigram.RDS")
 }  else  {
-    dtmBigram <- TermDocumentMatrix(task1, control = list(tokenize = BigramTokenizer))
-    m
-    saveRDS(dtmBigram, file="NLP.dtmBigram.RDS")
+  stop('Err, could not find NLP.dtmBigram.RDS')
 } 
-  
+#Convert the DTM to data.table for more functionality and higher performance in later steps
+dtBigram <-as.data.table(as.matrix(dtmBigram), keep.rowname = TRUE)
+#remove(dtmBigram)
 gc()
+
+#Build a new column that sums the three documents
+dtBigram$newval <- rowSums(dtBigram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+
+#Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
+dtBigram$pre_gram <- str_trim(str_replace(dtBigram$rn, "\\S+$", ""))
+dtBigram$post_gram <- str_extract(dtBigram$rn, "\\S+$")
+setkey(dtBigram, pre_gram)
+
+#Get a count  by pre_gram as a step towards calcualting the probability of post_grams, then calc the probalbity
+dtBigram[, totPre :=  sum(newval), by = pre_gram]
+dtBigram$prob <- dtBigram$newval / dtBigram$totPre
+
+#Also calc the  overall number of times a post_gram appears in the table.  This value will be used in a simplified Kneser-Ney prioritization
+dtBigram[, totAll :=  sum(newval), by = post_gram]
+
+
+#Save the object for use in the runtime prediction model
+saveRDS(dtBigram[newval > 1], file="NLP.dtBigram.RDS") 
+rm(dtBigram)
+gc()
+ 
+
+###Trigrams
 if (file.exists("NLP.dtmTrigram.RDS")) {
   dtmTrigram <- readRDS(file="NLP.dtmTrigram.RDS")
 }  else  {
-    dtmTrigram <- TermDocumentMatrix(task1, control = list(tokenize = TrigramTokenizer ))
-    dtmTrigram <- removeSparseTerms(dtmTrigram, .5)
-    saveRDS(dtmTrigram, file="NLP.dtmTrigram.RDS")
+  stop('Err, could not find NLP.dtmTrigam.RDS')
 } 
-
-#Week three stuff -- convert to data tables and build probabilites
-#Eventually store these as RDS files
-
-dtBigram <-as.data.table(as.matrix(dtmBigram), keep.rowname = TRUE)
+#Convert the DTM to data.table for more functionality and higher performance in later steps
+dtTrigram <-as.data.table(as.matrix(dtmTrigram), keep.rowname = TRUE)
+remove(dtmTrigram)
+gc()
 
 #Build a new column that sums the three documents
-#dt$newval <- rowSums(dt[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
-dtBigram$newval <- rowSums(dtBigram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+dtTrigram$newval <- rowSums(dtTrigram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+
+#Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
+dtTrigram$pre_gram <- str_trim(str_replace(dtTrigram$rn, "\\S+$", ""))
+dtTrigram$post_gram <- str_extract(dtTrigram$rn, "\\S+$")
+setkey(dtTrigram, pre_gram)
+
+#Get a count  by pre_gram as a step towards calcualting the probability of post_grams, then calc the probalbity
+dtTrigram[, totPre :=  sum(newval), by = pre_gram]
+dtTrigram$prob <- dtTrigram$newval / dtTrigram$totPre
+
+
+#Also calc the  overall number of times a post_gram appears in the table.  This value will be used in a simplified Kneser-Ney prioritization
+dtTrigram[, totAll :=  sum(newval), by = post_gram]
+dtTrigram$popular  <- dtTrigram$newval / dtTrigram$totAll
+
+#Save the object for use in the runtime prediction model
+saveRDS(dtTrigram[newval > 1], file="NLP.dtTrigram.RDS") 
+rm(dtTrigram)
+
+
+###4grams
+if (file.exists("NLP.dtm4gram.RDS")) {
+  dtm4gram <- readRDS(file="NLP.dtm4gram.RDS")
+}  else  {
+  stop('Err, could not find NLP.dtm4gam.RDS')
+} 
+#Convert the DTM to data.table for more functionality and higher performance in later steps
+dt4gram <-as.data.table(as.matrix(dtm4gram), keep.rowname = TRUE)
+remove(dtm4gram)
+gc()
+
+#Build a new column that sums the three documents
+dt4gram$newval <- rowSums(dt4gram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+
+#Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
+dt4gram$pre_gram <- str_trim(str_replace(dt4gram$rn, "\\S+$", ""))
+dt4gram$post_gram <- str_extract(dt4gram$rn, "\\S+$")
+setkey(dt4gram, pre_gram)
+
+#Get a count  by pre_gram asdt a step towards calcualting the probability of post_grams, then calc the probalbity
+dt4gram[, totPre :=  sum(newval), by = pre_gram]
+dt4gram$prob <- dt4gram$newval / dt4gram$totPre
+
+
+#Also calc the  overall number of times a post_gram appears in the table.  This value will be used in a simplified Kneser-Ney prioritization
+dt4gram[, totAll :=  sum(newval), by = post_gram]
+dt4gram$popular  <- dt4gram$newval / dt4gram$totAll
+
+#Save the object for use in the runtime prediction model
+saveRDS(dt4gram[newval > 1 | totAll <2000  ], file="NLP.dt4gram.RDS") 
+saveRDS(dt4gram, file="NLP.dt4gram.RDS") 
+rm(dt4gram)
+
+gc()
 
 
 
-#Isolate the first and last words
-dtBigram$pre_gram <- str_trim(str_replace(dtBigram$rn, "\\S+$", ""))
-dtBigram$post_gram <- str_extract(dtBigram$rn, "\\S+$")
+###5grams
+if (file.exists("NLP.dtm5gram.RDS")) {
+  dtm5gram <- readRDS(file="NLP.dtm5gram.RDS")
+}  else  {
+  stop('Err, could not find NLP.dtm5gam.RDS')
+} 
+#Convert the DTM to data.table for more functionality and higher performance in later steps
+dt5gram <-as.data.table(as.matrix(dtm5gram), keep.rowname = TRUE)
+remove(dtm5gram)
+gc()
+
+#Build a new column that sums the three documents
+dt5gram$newval <- rowSums(dt5gram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+
+#Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
+dt5gram$pre_gram <- str_trim(str_replace(dt5gram$rn, "\\S+$", ""))
+dt5gram$post_gram <- str_extract(dt5gram$rn, "\\S+$")
+setkey(dt5gram, pre_gram)
+
+#Get a count  by pre_gram asdt a step towards calcualting the probability of post_grams, then calc the probalbity
+dt5gram[, totPre :=  sum(newval), by = pre_gram]
+dt5gram$prob <- dt5gram$newval / dt5gram$totPre
 
 
-#key the pre-column
-setkey(dtBigram, pre_gram)
+#Also calc the  overall number of times a post_gram appears in the table.  This value will be used in a simplified Kneser-Ney prioritization
+dt5gram[, totAll :=  sum(newval), by = post_gram]
+dt5gram$popular  <- dt5gram$newval / dt5gram$totAll
 
-#build anothew data table with gorup-by syntax
-#TODO :clean up first thtree rows
-dtBiGroup <-dtBigram[3:.N, sum(newval), by=pre_gram]
-setkey(dtBiGropu, pre_gram)
+#Save the object for use in the runtime prediction model
+saveRDS(dt5gram[newval > 1 | totAll <2000  ], file="NLP.dt5gram.RDS") 
+saveRDS(dt5gram, file="NLP.dt5gram.RDS") 
+rm(dt5gram)
 
-#Do a join to pick up the total number of pre_grams.  Then divide the counts of each post_gram by the grouped pre_gram
-# and populate a new column, prop
-#Logically, we do not expect any zero values in the group-by expression, so no divide by zero erros
-dtBigram$prob <- dtBigram$newval / dtBigram[dtBigramGroup]$V1
+gc()
+
 
