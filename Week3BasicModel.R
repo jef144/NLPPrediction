@@ -20,11 +20,11 @@ if (file.exists("NLP.dtmBigram.RDS")) {
 } 
 #Convert the DTM to data.table for more functionality and higher performance in later steps
 dtBigram <-as.data.table(as.matrix(dtmBigram), keep.rowname = TRUE)
-#remove(dtmBigram)
+remove(dtmBigram)
 gc()
 
 #Build a new column that sums the three documents
-dtBigram$newval <- rowSums(dtBigram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+dtBigram$newval <- rowSums(dtBigram[,.(en_US.trn)])
 
 #Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
 dtBigram$pre_gram <- str_trim(str_replace(dtBigram$rn, "\\S+$", ""))
@@ -57,7 +57,7 @@ remove(dtmTrigram)
 gc()
 
 #Build a new column that sums the three documents
-dtTrigram$newval <- rowSums(dtTrigram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+dtTrigram$newval <- rowSums(dtTrigram[,.(en_US.trn)])
 
 #Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
 dtTrigram$pre_gram <- str_trim(str_replace(dtTrigram$rn, "\\S+$", ""))
@@ -90,7 +90,7 @@ remove(dtm4gram)
 gc()
 
 #Build a new column that sums the three documents
-dt4gram$newval <- rowSums(dt4gram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+dt4gram$newval <- rowSums(dt4gram[,.(en_US.trn)])
 
 #Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
 dt4gram$pre_gram <- str_trim(str_replace(dt4gram$rn, "\\S+$", ""))
@@ -107,8 +107,7 @@ dt4gram[, totAll :=  sum(newval), by = post_gram]
 dt4gram$popular  <- dt4gram$newval / dt4gram$totAll
 
 #Save the object for use in the runtime prediction model
-saveRDS(dt4gram[newval > 1 | totAll <2000  ], file="NLP.dt4gram.RDS") 
-saveRDS(dt4gram, file="NLP.dt4gram.RDS") 
+saveRDS(dt4gram[newval > 1   ], file="NLP.dt4gram.RDS") 
 rm(dt4gram)
 
 gc()
@@ -123,29 +122,35 @@ if (file.exists("NLP.dtm5gram.RDS")) {
 } 
 #Convert the DTM to data.table for more functionality and higher performance in later steps
 dt5gram <-as.data.table(as.matrix(dtm5gram), keep.rowname = TRUE)
+
 remove(dtm5gram)
 gc()
 
 #Build a new column that sums the three documents
-dt5gram$newval <- rowSums(dt5gram[,.(en_US.blogs.txt, en_US.twitter.txt, en_US.news.txt)])
+dt5gram$newval <- rowSums(dt5gram[,.(en_US.trn)])
 
 #Isolate the first and last words into variable pre_gram and post_gram. Key the pre_gram column
 dt5gram$pre_gram <- str_trim(str_replace(dt5gram$rn, "\\S+$", ""))
 dt5gram$post_gram <- str_extract(dt5gram$rn, "\\S+$")
+gc()
 setkey(dt5gram, pre_gram)
+gc()
 
 #Get a count  by pre_gram asdt a step towards calcualting the probability of post_grams, then calc the probalbity
 dt5gram[, totPre :=  sum(newval), by = pre_gram]
+gc()
 dt5gram$prob <- dt5gram$newval / dt5gram$totPre
-
+gc()
 
 #Also calc the  overall number of times a post_gram appears in the table.  This value will be used in a simplified Kneser-Ney prioritization
 dt5gram[, totAll :=  sum(newval), by = post_gram]
+gc()
 dt5gram$popular  <- dt5gram$newval / dt5gram$totAll
+gc()
 
 #Save the object for use in the runtime prediction model
-saveRDS(dt5gram[newval > 1 | totAll <2000  ], file="NLP.dt5gram.RDS") 
-saveRDS(dt5gram, file="NLP.dt5gram.RDS") 
+saveRDS(dt5gram[newval > 1   ], file="NLP.dt5gram.RDS") 
+
 rm(dt5gram)
 
 gc()

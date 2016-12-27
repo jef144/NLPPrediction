@@ -2,12 +2,12 @@
 #library("RWeka")
 library("tm")   
 library(ngram) 
-library(parallel)
+#library(parallel)
     
 #Get to the file
 setwd("~/NLPCapstone")
 #Access the data.  Note that the subset folder has small files
-folder <-  "~/NLPCapstone/final/en_US/subset" 
+folder <-  "~/NLPCapstone/final/en_US/trn" 
 
 #Determine if we need to read the corpus text files, or just re-load the corpus object
 if ( file.exists("NLP.corpus1.RDS")) { 
@@ -21,29 +21,17 @@ if ( file.exists("NLP.corpus1.RDS")) {
     gc() 
     corpus1 <- tm_map(corpus1, removePunctuation)
     gc()
-    corpus1 <- tm_map(corpus1 , stripWhitespace)
-    gc()
     corpus1 <- tm_map(corpus1, content_transformer(tolower) )
-    corpus1 <- tm_map(corpus1, removeWords, stopwords("english")) 
+    #corpus1 <- tm_map(corpus1, removeWords, stopwords("english")) 
     gc()
     corpus1 <- tm_map(corpus1, stemDocument, language = "english") 
+    gc()
+    corpus1 <- tm_map(corpus1 , stripWhitespace)
+    gc()
     corpus1 <- tm_map(corpus1 , stripWhitespace)
     saveRDS(corpus1, file="NLP.corpus1.RDS")
 } 
-#end of reading corpus1 if no RDS file found
-if (file.exists("NLP.dtm1.RDS")) {
-  dtm1 <- readRDS(file="NLP.dtm1.RDS")
-}  else  {
-    dtm1 <- DocumentTermMatrix(corpus1)
-    gc()
-    saveRDS(dtm1, file="NLP.dtm1.RDS")
-    dtm1 <-removeSparseTerms(dtm1, 0.75) 
-    gc()
-    saveRDS(dtm1, file="NLP.dtm1.RDS")
-}
 
-#inspect(dtm1[1:3, 1000:1020])
- 
 #Todo:  I'd give 
 #perl -ane '($p, $m) = /(\S+) (eat|sleep|die|give)/i; print lc("$p $m\n") if $m;' *txt | grep "i'd" | sort | uniq -c | sort -nr | more
 #perl -ane '($p1, $p2, $p3, $p4,  $m) = /(jury) (\S+) (\S+) (\S+) (matter|case|incident|account)/i; print lc("$p1 $p2 $p3 $p4 $m\n") if $m;' *txt |  sort | uniq -c | sort -nr | more

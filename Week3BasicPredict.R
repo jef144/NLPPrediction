@@ -34,7 +34,7 @@ if (file.exists("NLP.dt5gram.RDS")) {
    corpusSearch <- tm_map(corpusSearch, removeNumbers)
    corpusSearch <- tm_map(corpusSearch, removePunctuation)
    corpusSearch <- tm_map(corpusSearch, content_transformer(tolower) )
-   corpusSearch <- tm_map(corpusSearch, removeWords, stopwords("english")) 
+   #corpusSearch <- tm_map(corpusSearch, removeWords, stopwords("english")) 
    corpusSearch <- tm_map(corpusSearch, stemDocument, language = "english") 
    corpusSearch <- tm_map(corpusSearch , stripWhitespace)
    pre_grams1 <- corpusSearch[[1]]$content
@@ -90,4 +90,4 @@ if (file.exists("NLP.dt5gram.RDS")) {
    
 }
 
-predictWord("united states america captain")
+predictWord("united states of")
